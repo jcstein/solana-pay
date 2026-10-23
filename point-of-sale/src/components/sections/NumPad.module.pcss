@@ -1,4 +1,6 @@
+/* Lightning CSS drops empty rules and then omits the CSS module export. */
 .root {
+    --empty: 0;
 }
 
 .text {
@@ -15,6 +17,7 @@
 }
 
 .buttons {
+    --empty: 0; /* keep CSS module export */
 }
 
 .row {
