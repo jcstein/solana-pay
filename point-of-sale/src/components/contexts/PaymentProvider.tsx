@@ -1,11 +1,11 @@
 import {
-    createTransaction,
+    createTransfer,
     encodeURL,
-    findTransactionSignature,
-    FindTransactionSignatureError,
+    findReference,
+    FindReferenceError,
     parseURL,
-    validateTransactionSignature,
-    ValidateTransactionSignatureError,
+    validateTransfer,
+    ValidateTransferError,
 } from '@solana/pay';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { ConfirmedSignatureInfo, Keypair, PublicKey, TransactionSignature } from '@solana/web3.js';
@@ -45,7 +45,7 @@ export const PaymentProvider: FC<PaymentProviderProps> = ({ children }) => {
                 label,
                 message,
                 memo,
-            }),
+            }).toString(),
         [recipient, amount, splToken, reference, label, message, memo]
     );
 
@@ -75,13 +75,15 @@ export const PaymentProvider: FC<PaymentProviderProps> = ({ children }) => {
 
             const run = async () => {
                 try {
-                    const { recipient, amount, splToken, reference, memo } = parseURL(url);
-                    if (!amount) return;
+                    const parsed = parseURL(url);
+                    if (!('recipient' in parsed) || !parsed.amount) return;
 
-                    const transaction = await createTransaction(connection, publicKey, recipient, amount, {
-                        splToken,
-                        reference,
-                        memo,
+                    const transaction = await createTransfer(connection, publicKey, {
+                        recipient: parsed.recipient,
+                        amount: parsed.amount,
+                        splToken: parsed.splToken,
+                        reference: parsed.reference,
+                        memo: parsed.memo,
                     });
 
                     if (!changed) {
@@ -110,7 +112,7 @@ export const PaymentProvider: FC<PaymentProviderProps> = ({ children }) => {
         const interval = setInterval(async () => {
             let signature: ConfirmedSignatureInfo;
             try {
-                signature = await findTransactionSignature(connection, reference, undefined, 'confirmed');
+                signature = await findReference(connection, reference, { finality: 'confirmed' });
 
                 if (!changed) {
                     clearInterval(interval);
@@ -121,7 +123,7 @@ export const PaymentProvider: FC<PaymentProviderProps> = ({ children }) => {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
             } catch (error: any) {
                 // If the RPC node doesn't have the transaction signature yet, try again
-                if (!(error instanceof FindTransactionSignatureError)) {
+                if (!(error instanceof FindReferenceError)) {
                     console.error(error);
                 }
             }
@@ -140,14 +142,11 @@ export const PaymentProvider: FC<PaymentProviderProps> = ({ children }) => {
 
         const run = async () => {
             try {
-                await validateTransactionSignature(
+                await validateTransfer(
                     connection,
                     signature,
-                    recipient,
-                    amount,
-                    splToken,
-                    reference,
-                    'confirmed'
+                    { recipient, amount, splToken, reference },
+                    { commitment: 'confirmed' }
                 );
 
                 if (!changed) {
@@ -157,7 +156,7 @@ export const PaymentProvider: FC<PaymentProviderProps> = ({ children }) => {
             } catch (error: any) {
                 // If the RPC node doesn't have the transaction yet, try again
                 if (
-                    error instanceof ValidateTransactionSignatureError &&
+                    error instanceof ValidateTransferError &&
                     (error.message === 'not found' || error.message === 'missing meta')
                 ) {
                     console.warn(error);
